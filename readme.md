@@ -1,5 +1,7 @@
 ## Azure Container Apps -> Magento Commerce (Bitnami image)
   This bicep template deploys a Magento Commerce in Azure Container Apps and Azure MySQL Flexi server. It is based on Bitnami Magento docker image and official Elasticsearch docker image.
+  
+![image](https://user-images.githubusercontent.com/11852796/184132916-1aae7d6b-c924-4e85-ac97-3cccbacc516f.png)
 
 ## What does it deploy ?
 
