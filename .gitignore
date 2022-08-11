@@ -1,0 +1,9 @@
+Docker
+env.json
+env.bitnami.json
+magento.bicep
+test
+test.ps1
+magento.ps1
+local.ps1
+working.ps1
