@@ -4,10 +4,15 @@
 ## What does it deploy ?
 
 [x] Azure Container Apps
+
 [x] Azure MySQL Flexi server
+
 [x] Elasticsearch in Container Apps
+
 [x] Bitnami Magento in Container Apps
+
 [x] Storage account for uploads/ backups persistence
+
 [x] Log analytics workspace for container logs
 
 ## Why it is NOT production ready ?
