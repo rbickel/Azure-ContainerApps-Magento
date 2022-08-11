@@ -74,7 +74,7 @@ resource firewallRule 'Microsoft.DBforMySQL/flexibleServers/firewallRules@2021-1
 }
 
 resource mysqlDatabase 'Microsoft.DBforMySQL/flexibleServers/databases@2021-12-01-preview' = {
-  name: 'magento'
+  name: 'magento2'
   parent: mysql
   properties: {
     collation: 'utf8_general_ci'
@@ -101,52 +101,73 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2022-03-01' = {
   }
 }
 
-resource magentoStorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
-  location: location
-  name: uniqueName
-  kind: 'FileStorage'
-  sku: {
-    name: 'Premium_LRS'
-  }
-  properties: {
-    accessTier: 'Premium'
-  }
-}
+// resource magentoStorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
+//   location: location
+//   name: uniqueName
+//   kind: 'FileStorage'
+//   sku: {
+//     name: 'Premium_LRS'
+//   }
+//   properties: {
+//     accessTier: 'Premium'
+//   }
+// }
 
-resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2021-09-01' = {
-  name: 'default'
-  parent: magentoStorage
-  properties: {
-    protocolSettings: {
-      smb: {
-        multichannel: {
-          enabled: true
-        }
-      }
-    }
-  }
-}
+// resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2021-09-01' = {
+//   name: 'default'
+//   parent: magentoStorage
+//   properties: {
+//     protocolSettings: {
+//       smb: {
+//         multichannel: {
+//           enabled: false
+//         }
+//       }
+//     }
+//   }
+// }
 
-resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
-  name: '${magentoStorage.name}/default/magento-uploads'
-  dependsOn: [ fileService ]
-}
+// resource fileShare1 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
+//   name: '${magentoStorage.name}/default/magento-uploads'
+//   dependsOn: [ fileService ]
+// }
 
-resource managedEnvironmentStorage 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
-  name: 'magento-uploads'
-  parent: managedEnvironment
-  dependsOn: [
-    fileShare
-  ]
-  properties: {
-    azureFile: {
-      accessMode: 'ReadWrite'
-      accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
-      accountName: magentoStorage.name
-      shareName: 'magento-uploads'
-    }
-  }
-}
+// resource fileShare2 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
+//   name: '${magentoStorage.name}/default/magento-backups'
+//   dependsOn: [ fileService ]
+// }
+
+// resource managedEnvironmentStorageUploads 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
+//   name: 'magento-uploads'
+//   parent: managedEnvironment
+//   dependsOn: [
+//     fileShare1
+//   ]
+//   properties: {
+//     azureFile: {
+//       accessMode: 'ReadWrite'
+//       accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
+//       accountName: magentoStorage.name
+//       shareName: 'magento-uploads'
+//     }
+//   }
+// }
+
+// resource managedEnvironmentStorageBackups 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
+//   name: 'magento-backups'
+//   parent: managedEnvironment
+//   dependsOn: [
+//     fileShare2
+//   ]
+//   properties: {
+//     azureFile: {
+//       accessMode: 'ReadWrite'
+//       accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
+//       accountName: magentoStorage.name
+//       shareName: 'magento-backups'
+//     }
+//   }
+// }
 
 // resource vanishApp 'Microsoft.App/containerApps@2022-03-01' = {
 //   location: location
@@ -217,8 +238,7 @@ resource elasticApp 'Microsoft.App/containerApps@2022-03-01' = {
   }
 }
 
-//Generate magento environment variables  and secrets
-var magentoHost = '${name}.${managedEnvironment.properties.defaultDomain}'
+//magento environment variables and secrets
 var env = [
   {
     name: 'MAGENTO_DATABASE_NAME'
@@ -230,15 +250,11 @@ var env = [
   }
   {
     name: 'MAGENTO_HOST'
-    value: magentoHost
+    value: '${name}.${managedEnvironment.properties.defaultDomain}'
   }
   {
     name: 'MAGENTO_DATABASE_HOST'
     value: mysql.properties.fullyQualifiedDomainName
-  }
-  {
-    name: 'MYSQL_CLIENT_ENABLE_SSL'
-    value: 'yes'
   }
   {
     name: 'BITNAMI_DEBUG'
@@ -299,7 +315,6 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
     disableMysqlSSL
     firewallRule
     elasticApp
-    managedEnvironmentStorage
   ]
   name: name
   properties: {
@@ -320,14 +335,19 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
       }
       volumes: [
         {
-          name: 'uploads'
-          storageName: 'magento-uploads'
-          storageType: 'AzureFile'
-        }
-        {
           name: 'magento'
           storageType: 'EmptyDir'
         }
+        // {
+        //   name: managedEnvironmentStorageUploads.name
+        //   storageName: managedEnvironmentStorageUploads.name
+        //   storageType: 'AzureFile'
+        // }
+        // {
+        //   name: managedEnvironmentStorageBackups.name
+        //   storageName: managedEnvironmentStorageBackups.name
+        //   storageType: 'AzureFile'
+        // }
       ]
       containers: [
         {
@@ -353,7 +373,6 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
                 path: '/'
                 port: 8080
                 scheme: 'HTTP'
-                host: magentoHost
               }
             }
             {
@@ -366,7 +385,6 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
                 path: '/'
                 port: 8080
                 scheme: 'HTTP'
-                host: magentoHost
               }
             }
             {
@@ -379,7 +397,6 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
                 path: '/'
                 port: 8080
                 scheme: 'HTTP'
-                host: magentoHost
               }
             }
           ]
@@ -391,6 +408,10 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
             // {
             //   volumeName: 'magento-uploads'
             //   mountPath: '/bitnami/magento/uploads'
+            // }
+            // {
+            //   volumeName: 'magento-backups'
+            //   mountPath: '/bitnami/magento/backups'
             // }
           ]
         }
