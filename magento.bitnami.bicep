@@ -8,6 +8,26 @@ param mysqlUsername string = 'magento'
 
 var uniqueName = '${name}${uniqueString(resourceGroup().id, subscription().id)}'
 
+resource vnet 'Microsoft.Network/virtualNetworks@2022-01-01' = {
+  name: '${name}-vnet'
+  location: location
+  properties: {
+    addressSpace: {
+      addressPrefixes: [
+        '10.0.0.0/8'
+      ]
+    }
+    subnets: [  
+      {
+        name: '${name}-subnet'
+        properties:{
+          addressPrefix: '10.1.0.0/23'
+        }
+      }
+    ]
+  }
+}
+
 resource mysql 'Microsoft.DBforMySQL/flexibleServers@2021-05-01-preview' = {
   name: uniqueName
   location: location
@@ -91,6 +111,11 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2022-03-01' = {
   location: location
   name: name
   properties: {
+    vnetConfiguration: {
+      internal: false
+      infrastructureSubnetId: vnet.properties.subnets[0].id
+      runtimeSubnetId: vnet.properties.subnets[0].id
+    }
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -241,12 +266,16 @@ resource elasticApp 'Microsoft.App/containerApps@2022-03-01' = {
 //magento environment variables and secrets
 var env = [
   {
+    name: 'MAGENTO_EXTRA_INSTALL_ARGS'
+    value: '--cache-backend=redis --cache-backend-redis-server=${redisApp.properties.configuration.ingress.fqdn} --session-save=redis --session-save-redis-host=${redisApp.properties.configuration.ingress.fqdn}'
+  }
+  {
     name: 'MAGENTO_DATABASE_NAME'
     value: mysqlDatabase.name
   }
   {
     name: 'MAGENTO_ELASTICSEARCH_HOST'
-    value: '${elasticApp.name}.internal.${managedEnvironment.properties.defaultDomain}'
+    value: elasticApp.properties.configuration.ingress.fqdn
   }
   {
     name: 'MAGENTO_HOST'
@@ -308,6 +337,40 @@ var secrets = [
   }
 ]
 
+
+resource redisApp 'Microsoft.App/containerApps@2022-03-01' = {
+  location: location
+  name: '${name}-redis'
+  properties: {
+    configuration: {
+      ingress: {
+        external: false
+        targetPort: 6379
+        transport: 'tcp'
+      }
+    }
+    managedEnvironmentId: managedEnvironment.id
+    template: {
+      containers: [
+        {
+          name: 'redis'
+          image: 'redis:5.0.3'
+          resources: {
+            cpu: '1'
+            memory: '2Gi'
+          }
+          env:[
+            {
+              name: 'ALLOW_EMPTY_PASSWORD'
+              value: 'yes'
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
+
 resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
   location: location
   dependsOn: [
@@ -315,6 +378,7 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
     disableMysqlSSL
     firewallRule
     elasticApp
+    redisApp
   ]
   name: name
   properties: {
@@ -330,8 +394,8 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
     }
     template: {
       scale: {
-        minReplicas: 1
-        maxReplicas: 1
+        minReplicas: 2
+        maxReplicas: 5
       }
       volumes: [
         {
@@ -421,3 +485,4 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
 }
 
 output magento_url string = 'https://${magentoApp.properties.configuration.ingress.fqdn}'
+output redis_internal_fqdn string = redisApp.properties.configuration.ingress.fqdn
