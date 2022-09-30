@@ -7,6 +7,10 @@ param mysqlPassword string = 'Password123_'
 param mysqlUsername string = 'magento'
 
 var uniqueName = '${name}${uniqueString(resourceGroup().id, subscription().id)}'
+var redisPassword = 'tFcbC2WAqGjJqvgpj6UsYmYoZd212k3vMAzCaCUjAbA='
+var redisHost = 'rbklmagento.redis.cache.windows.net'
+
+
 
 resource vnet 'Microsoft.Network/virtualNetworks@2022-01-01' = {
   name: '${name}-vnet'
@@ -17,10 +21,10 @@ resource vnet 'Microsoft.Network/virtualNetworks@2022-01-01' = {
         '10.0.0.0/8'
       ]
     }
-    subnets: [  
+    subnets: [
       {
         name: '${name}-subnet'
-        properties:{
+        properties: {
           addressPrefix: '10.1.0.0/23'
         }
       }
@@ -267,7 +271,7 @@ resource elasticApp 'Microsoft.App/containerApps@2022-03-01' = {
 var env = [
   {
     name: 'MAGENTO_EXTRA_INSTALL_ARGS'
-    value: '--cache-backend=redis --cache-backend-redis-server=${redisApp.properties.configuration.ingress.fqdn} --session-save=redis --session-save-redis-host=${redisApp.properties.configuration.ingress.fqdn}'
+    secretRef: 'extraargs'
   }
   {
     name: 'MAGENTO_DATABASE_NAME'
@@ -335,8 +339,11 @@ var secrets = [
     name: 'mysqlpassword'
     value: mysqlPassword
   }
+  {
+    name: 'extraargs'
+    value: '--page-cache=redis --page-cache-redis-db=1 --page-cache-redis-server=${redisHost} --page-cache-redis-password=${redisPassword} --cache-backend=redis --cache-backend-redis-server=${redisHost} --cache-backend-redis-password=${redisPassword} --cache-backend-redis-db=2 --session-save=redis --session-save-redis-password=${redisPassword} --session-save-redis-host=${redisHost}'
+  }
 ]
-
 
 resource redisApp 'Microsoft.App/containerApps@2022-03-01' = {
   location: location
@@ -359,10 +366,14 @@ resource redisApp 'Microsoft.App/containerApps@2022-03-01' = {
             cpu: '1'
             memory: '2Gi'
           }
-          env:[
+          env: [
             {
               name: 'ALLOW_EMPTY_PASSWORD'
               value: 'yes'
+            }
+            {
+              name: 'REDIS_PASSWORD'
+              value: redisPassword
             }
           ]
         }
