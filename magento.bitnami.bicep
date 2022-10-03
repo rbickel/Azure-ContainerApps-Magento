@@ -2,15 +2,23 @@ param name string = 'magento'
 param location string = 'northeurope'
 
 @secure()
-param mysqlPassword string = 'Password123_'
+param magentoUsername string = 'user'
+@secure()
+param magentoPassword string = 'bitnami1'
 @secure()
 param mysqlUsername string = 'magento'
+@secure()
+param mysqlPassword string = 'Password123_'
 
 var uniqueName = '${name}${uniqueString(resourceGroup().id, subscription().id)}'
-var redisPassword = 'tFcbC2WAqGjJqvgpj6UsYmYoZd212k3vMAzCaCUjAbA='
-var redisHost = 'rbklmagento.redis.cache.windows.net'
 
+// resource redis 'Microsoft.Cache/redis@2022-05-01' existing = {
+//   name: 'rbklmagento'
+//   scope: 'magento3'
+// }
 
+var redisPassword = 'tFcbC2WAqGjJqvgpj6UsYmYoZd212k3vMAzCaCUjAbA=' // redis.properties.accessKeys.primaryKey
+var redisHost = 'rbklmagento.redis.cache.windows.net' //redis.properties.hostName
 
 resource vnet 'Microsoft.Network/virtualNetworks@2022-01-01' = {
   name: '${name}-vnet'
@@ -36,7 +44,7 @@ resource mysql 'Microsoft.DBforMySQL/flexibleServers@2021-05-01-preview' = {
   name: uniqueName
   location: location
   sku: {
-    name: 'Standard_B1ms'
+    name: 'Standard_B4ms'
     tier: 'Burstable'
   }
   properties: {
@@ -130,106 +138,43 @@ resource managedEnvironment 'Microsoft.App/managedEnvironments@2022-03-01' = {
   }
 }
 
-// resource magentoStorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
-//   location: location
-//   name: uniqueName
-//   kind: 'FileStorage'
-//   sku: {
-//     name: 'Premium_LRS'
-//   }
-//   properties: {
-//     accessTier: 'Premium'
-//   }
-// }
+resource magentoStorage 'Microsoft.Storage/storageAccounts@2021-09-01' = {
+  location: location
+  name: uniqueName
+  kind: 'FileStorage'
+  sku: {
+    name: 'Premium_LRS'
+  }
+  properties: {
+    accessTier: 'Premium'
+  }
+}
 
-// resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2021-09-01' = {
-//   name: 'default'
-//   parent: magentoStorage
-//   properties: {
-//     protocolSettings: {
-//       smb: {
-//         multichannel: {
-//           enabled: false
-//         }
-//       }
-//     }
-//   }
-// }
+resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2021-09-01' = {
+  name: 'default'
+  parent: magentoStorage
+}
 
-// resource fileShare1 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
-//   name: '${magentoStorage.name}/default/magento-uploads'
-//   dependsOn: [ fileService ]
-// }
+resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
+  name: '${magentoStorage.name}/default/magento'
+  dependsOn: [ fileService ]
+}
 
-// resource fileShare2 'Microsoft.Storage/storageAccounts/fileServices/shares@2021-04-01' = {
-//   name: '${magentoStorage.name}/default/magento-backups'
-//   dependsOn: [ fileService ]
-// }
-
-// resource managedEnvironmentStorageUploads 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
-//   name: 'magento-uploads'
-//   parent: managedEnvironment
-//   dependsOn: [
-//     fileShare1
-//   ]
-//   properties: {
-//     azureFile: {
-//       accessMode: 'ReadWrite'
-//       accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
-//       accountName: magentoStorage.name
-//       shareName: 'magento-uploads'
-//     }
-//   }
-// }
-
-// resource managedEnvironmentStorageBackups 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
-//   name: 'magento-backups'
-//   parent: managedEnvironment
-//   dependsOn: [
-//     fileShare2
-//   ]
-//   properties: {
-//     azureFile: {
-//       accessMode: 'ReadWrite'
-//       accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
-//       accountName: magentoStorage.name
-//       shareName: 'magento-backups'
-//     }
-//   }
-// }
-
-// resource vanishApp 'Microsoft.App/containerApps@2022-03-01' = {
-//   location: location
-//   name: '${name}-vanish'
-//   properties: {
-//     configuration: {
-//       ingress: {
-//         external: true
-//         targetPort: 443
-//       }
-//     }
-//     managedEnvironmentId: managedEnvironment.id
-//     template: {
-//       scale:{
-//         minReplicas:1
-//         maxReplicas:1
-//       }
-//       containers: [
-//         {
-//           name: 'varnish'
-//           image: 'varnish'
-//           resources: {
-//             cpu: 2
-//             memory: '4Gi'
-//           }
-//           env: [
-
-//           ]
-//         }
-//       ]
-//     }
-//   }
-// }
+resource managedEnvironmentStorageUploads 'Microsoft.App/managedEnvironments/storages@2022-03-01' = {
+  name: 'magento'
+  parent: managedEnvironment
+  dependsOn: [
+    fileShare
+  ]
+  properties: {
+    azureFile: {
+      accessMode: 'ReadWrite'
+      accountKey: listKeys(magentoStorage.id, magentoStorage.apiVersion).keys[0].value
+      accountName: magentoStorage.name
+      shareName: 'magento'
+    }
+  }
+}
 
 resource elasticApp 'Microsoft.App/containerApps@2022-03-01' = {
   location: location
@@ -269,10 +214,6 @@ resource elasticApp 'Microsoft.App/containerApps@2022-03-01' = {
 
 //magento environment variables and secrets
 var env = [
-  {
-    name: 'MAGENTO_EXTRA_INSTALL_ARGS'
-    secretRef: 'extraargs'
-  }
   {
     name: 'MAGENTO_DATABASE_NAME'
     value: mysqlDatabase.name
@@ -329,6 +270,10 @@ var env = [
     name: 'MAGENTO_DATABASE_PASSWORD'
     secretRef: 'mysqlpassword'
   }
+  {
+    name: 'MAGENTO_EXTRA_INSTALL_ARGS'
+    secretRef: 'extraargs'
+  }
 ]
 var secrets = [
   {
@@ -363,7 +308,7 @@ resource redisApp 'Microsoft.App/containerApps@2022-03-01' = {
           name: 'redis'
           image: 'redis:5.0.3'
           resources: {
-            cpu: '1'
+            cpu: 1
             memory: '2Gi'
           }
           env: [
@@ -405,8 +350,18 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
     }
     template: {
       scale: {
-        minReplicas: 2
+        minReplicas: 1
         maxReplicas: 5
+        rules: [
+          {
+            name: 'http-rule'
+            http: {
+              metadata: {
+                concurrentRequests: '100'
+              }
+            }
+          }
+        ]
       }
       volumes: [
         {
@@ -480,14 +435,6 @@ resource magentoApp 'Microsoft.App/containerApps@2022-03-01' = {
               volumeName: 'magento'
               mountPath: '/bitnami/magento'
             }
-            // {
-            //   volumeName: 'magento-uploads'
-            //   mountPath: '/bitnami/magento/uploads'
-            // }
-            // {
-            //   volumeName: 'magento-backups'
-            //   mountPath: '/bitnami/magento/backups'
-            // }
           ]
         }
       ]
