@@ -1,7 +1,7 @@
 ## Azure Container Apps -> Magento2 Commerce (Bitnami image)
   This bicep template deploys a Magento2 Commerce in Azure Container Apps and Azure MySQL Flexi server. It is based on Bitnami Magento docker image and official Elasticsearch docker image.
   
-![image](https://user-images.githubusercontent.com/11852796/184134439-47f08c7b-4172-48cc-baf7-357e54619ecd.png)
+![image](https://user-images.githubusercontent.com/11852796/193596181-75f90621-03a4-46cb-9285-4758e4f9226d.png)
 
 ## What does it deploy ?
 
@@ -19,7 +19,6 @@
 
 ## Why it is NOT production ready ?
 
-- Does not support Bring-Your-Own-Vnet
 - MySql Server firewall is fully open
 - MySql SSL is not enforced
 - Storage account firewall is fully open
